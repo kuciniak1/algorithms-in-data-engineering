@@ -8,43 +8,51 @@ forward(::BroadcastedOperator{typeof(Convolution)}, input, weights, bias) = let
     input_height, input_width, input_channels = size(input)
     kernel_height, kernel_width, _, output_channels = size(weights)
 
-    output_height = input_height - kernel_height + 1
-    output_width = input_width - kernel_width + 1    
-    output = zeros(output_height, output_width, output_channels)
-
+    output = zeros(Float32, input_height - kernel_height + 1, input_width - kernel_width + 1, output_channels)
+    tmp_input = zeros(Float32, input_height, input_width)
+    tmp_weights = zeros(Float32, kernel_height, kernel_width)
+    
     for k in 1:output_channels
         for c in 1:input_channels
-            output[:, :, k] += Convolution_2d(input[:, :, c], weights[:, :, c, k], bias[k])
+            tmp_input .= @views input[:, :, c]
+            tmp_weights .= @views weights[:, :, c, k]
+            output[:, :, k] .+= Convolution_2d(tmp_input, tmp_weights; bias=bias[k])
         end
     end
-    
     return output
 end
 
 backward(node::BroadcastedOperator{typeof(Convolution)}, input, weights, bias, gradient) = let
-    input_height, input_width, input_channels = size(input) # 13x13x6
-    output_height, output_width, output_channels = size(gradient) # 11x11x16
-    kernel_height, kernel_width, _, _ = size(weights) # 3x3x6x16
+    input_height, input_width, input_channels = size(input)
+    output_height, output_width, output_channels = size(gradient)
+    kernel_height, kernel_width, _, _ = size(weights)
     
+    grad_input = zeros(Float32, size(input))
+    grad_weights = zeros(Float32, size(weights))
     
-    grad_input = zeros(size(input)) # 13x13x6
-    for k in 1:input_channels # 6
-        for c in 1:output_channels # 16
-            grad_input[:, :, k] += Convolution_2d(weights[:, :, k, c], gradient[:, :, c], 0; padding=true)
+    tmp_weights = zeros(Float32, kernel_height, kernel_width)
+    tmp_input = zeros(Float32, input_height, input_width)
+    tmp_gradient = zeros(Float32, output_height, output_width)
+    
+    for k in 1:input_channels
+        for c in 1:output_channels
+            tmp_weights .= @views weights[:, :, k, c]
+            tmp_gradient .= @views gradient[:, :, c]
+            grad_input[:, :, k] += Convolution_2d(tmp_weights, tmp_gradient; padding=true)
         end
     end
-
     
-    grad_kernel = zeros(size(weights)) # 3x3x1x6
-    for k in 1:input_channels #1
-        for c in 1:output_channels #6
-            grad_kernel[:, :, k, c] += Convolution_2d(input[:, :, k], gradient[:, :, c], 0)
+    for k in 1:input_channels
+        for c in 1:output_channels
+            tmp_input .= @views input[:, :, k]
+            tmp_gradient .= @views gradient[:, :, c]
+            grad_weights[:, :, k, c] += Convolution_2d(tmp_input, tmp_gradient)
         end
     end
 
     grad_bias = reshape(sum(gradient, dims=(1,2,4)), :)
     
-    return grad_input, grad_kernel, grad_bias
+    return grad_input, grad_weights, grad_bias
 end
 
 
@@ -54,100 +62,73 @@ forward(::BroadcastedOperator{typeof(Convolution)}, input, weights) = let
     input_height, input_width, input_channels = size(input)
     kernel_height, kernel_width, _, output_channels = size(weights)
 
-    output_height = input_height - kernel_height + 1
-    output_width = input_width - kernel_width + 1    
-    output = zeros(output_height, output_width, output_channels)
-
+    output = zeros(Float32, input_height - kernel_height + 1, input_width - kernel_width + 1, output_channels)
+    tmp_input = zeros(Float32, input_height, input_width)
+    tmp_weights = zeros(Float32, kernel_height, kernel_width)
+    
     for k in 1:output_channels
         for c in 1:input_channels
-            output[:, :, k] += Convolution_2d(input[:, :, c], weights[:, :, c, k])
+            tmp_input .= @views input[:, :, c]
+            tmp_weights .= @views weights[:, :, c, k]
+            output[:, :, k] .+= Convolution_2d(tmp_input, tmp_weights)
         end
     end
-    
     return output
 end
 
 backward(node::BroadcastedOperator{typeof(Convolution)}, input, weights, gradient) = let
-    input_height, input_width, input_channels = size(input) # 13x13x6
-    output_height, output_width, output_channels = size(gradient) # 11x11x16
-    kernel_height, kernel_width, _, _ = size(weights) # 3x3x6x16
+    input_height, input_width, input_channels = size(input)
+    output_height, output_width, output_channels = size(gradient)
+    kernel_height, kernel_width, _, _ = size(weights)
     
+    grad_input = zeros(Float32, size(input))
+    grad_weights = zeros(Float32, size(weights))
     
-    grad_input = zeros(size(input)) # 13x13x6
-    for k in 1:input_channels # 6
-        for c in 1:output_channels # 16
-            grad_input[:, :, k] += Convolution_2d(weights[:, :, k, c], gradient[:, :, c]; padding=true)
+    tmp_weights = zeros(Float32, kernel_height, kernel_width)
+    tmp_input = zeros(Float32, input_height, input_width)
+    tmp_gradient = zeros(Float32, output_height, output_width)
+    
+    for k in 1:input_channels
+        for c in 1:output_channels
+            tmp_weights .= @views weights[:, :, k, c]
+            tmp_gradient .= @views gradient[:, :, c]
+            grad_input[:, :, k] += Convolution_2d(tmp_weights, tmp_gradient; padding=true)
         end
     end
 
-    grad_kernel = zeros(size(weights)) # 3x3x1x6
-    for k in 1:input_channels #1
-        for c in 1:output_channels #6
-            grad_kernel[:, :, k, c] += Convolution_2d(input[:, :, k],gradient[:, :, c])
+    for k in 1:input_channels
+        for c in 1:output_channels
+            tmp_input .= @views input[:, :, k]
+            tmp_gradient .= @views gradient[:, :, c]
+            grad_weights[:, :, k, c] += Convolution_2d(tmp_input, tmp_gradient)
         end
     end
-
-    return grad_input, grad_kernel
+    
+    return grad_input, grad_weights
 end
 
 
 
-function Convolution_2d(input, kernel, bias; padding=false)
-    input_height, input_width = size(input)
+function Convolution_2d(input, kernel; bias=0., padding=false)
+    input_rows, input_columns = size(input)
     kernel_height, kernel_width = size(kernel)
 
     if padding
-        tmp = zeros(input_height+2*kernel_height-2, input_width+2*kernel_width-2)
-        for i in 1:input_height
-            for j in 1:input_width
-                tmp[i+kernel_height-1, j+kernel_width-1] = input[i,j]
-            end
-        end
-        input = tmp
-        input_height, input_width = size(input)
+        padded_input = zeros(Float32, input_rows + 2*kernel_height - 2, input_columns + 2*kernel_width - 2)
+        padded_input[kernel_height:end-kernel_height+1, kernel_width:end-kernel_width+1] .= input
+        input_rows, input_columns = size(padded_input)
+        input = padded_input
     end
 
+    output_rows = input_rows - kernel_height + 1
+    output_columns = input_columns - kernel_width + 1
+    output = zeros(Float32, output_rows, output_columns)
 
-    output_height = input_height - kernel_height + 1
-    output_width = input_width - kernel_width + 1    
-    output = zeros(output_height, output_width)
-
-    for i in 1:output_height
-        for j in 1:output_width
-            patch = input[i:i+kernel_height-1, j:j+kernel_width-1]
-            output[i, j] += sum(patch .* kernel) .+ bias
+    for c in 1:output_columns
+        for r in 1:output_rows
+            patch = @view input[r:r+kernel_height-1, c:c+kernel_width-1]
+            output[r, c] = sum(patch .* kernel) + bias
         end
     end
     return output
 end
-
-
-function Convolution_2d(input, kernel; padding=false)
-    input_height, input_width = size(input)
-    kernel_height, kernel_width = size(kernel)
-
-    if padding
-        tmp = zeros(input_height+2*kernel_height-2, input_width+2*kernel_width-2)
-        for i in 1:input_height
-            for j in 1:input_width
-                tmp[i+kernel_height-1, j+kernel_width-1] = input[i,j]
-            end
-        end
-        input = tmp
-        input_height, input_width = size(input)
-    end
-
-
-    output_height = input_height - kernel_height + 1
-    output_width = input_width - kernel_width + 1    
-    output = zeros(output_height, output_width)
-
-    for i in 1:output_height
-        for j in 1:output_width
-            patch = input[i:i+kernel_height-1, j:j+kernel_width-1]
-            output[i, j] += sum(patch .* kernel)
-        end
-    end
-    return output
-end
-
