@@ -6,28 +6,12 @@ forward(::BroadcastedOperator{typeof(ReLu)}, input) = let
 end
 
 backward(node::BroadcastedOperator{typeof(ReLu)}, input::Array{Float64, 1}, g) = let
-    height = length(input)
-    J = zeros(height)
-    for i in 1:height
-        if input[i] > 0
-            J[i] = 1
-        end
-    end
-    tuple(J.* g)
+    J = input .> 0
+    tuple(J .* g)
 end
 
 
-backward(node::BroadcastedOperator{typeof(ReLu)}, input::Array{Float64,3}, g) = let
-    height, width, channels = size(input)
-    J = zeros(height, width, channels)
-    for i in 1:height
-        for j in 1:width
-            for c in 1:channels
-                if input[i,j,c] > 0
-                    J[i,j,c] = 1
-                end
-            end
-        end
-    end
-    tuple(J.* g)
+backward(node::BroadcastedOperator{typeof(ReLu)}, input::Array{Float64, 3}, g) = let
+    J = input .> 0
+    tuple(J .* g)
 end
