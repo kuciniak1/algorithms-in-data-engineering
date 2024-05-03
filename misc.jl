@@ -18,12 +18,14 @@ end
 
 function onehot(target::Int64, labels::UnitRange{Int64})
     num_labels = length(labels)
-    onehot = zeros(num_labels)
-    idx = findfirst(isequal(target), labels)
-    onehot[idx] = 1
+    onehot = zeros(Float32, num_labels)
+    if target in labels
+        onehot[target - first(labels) + 1] = 1
+    end
     return onehot
 end
 
 function onecold(vector, labels)
-    argmax(vector) <= length(labels) ? labels[argmax(vector)] : nothing
+    idx = argmax(vector)
+    idx <= length(labels) ? labels[idx] : nothing
 end
