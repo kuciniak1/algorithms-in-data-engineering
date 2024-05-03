@@ -1,23 +1,23 @@
 MaxPool(input::GraphNode, pool_size) = BroadcastedOperator(MaxPool, input, pool_size)
 forward(::BroadcastedOperator{typeof(MaxPool)}, input, pool_size) = let
-    input_height, input_width, channels = size(input)
+    input_rows, input_columns, channels = size(input)
     pool_height, pool_width = pool_size
     
-    output_height = div(input_height, pool_height)
-    output_width = div(input_width, pool_width)
+    output_rows = div(input_rows, pool_height)
+    output_columns = div(input_columns, pool_width)
     
-    output = zeros(output_height, output_width, channels)
+    output = zeros(Float32, output_rows, output_columns, channels)
     
     for c in 1:channels
-        for i in 1:output_height
-            for j in 1:output_width
-                row_start = 1 + (i-1)*pool_height
+        for col in 1:output_columns
+            for row in 1:output_rows
+                row_start = 1 + (row-1)*pool_height
                 row_end = row_start + pool_height-1
-                col_start = 1 + (j-1)*pool_width
+                col_start = 1 + (col-1)*pool_width
                 col_end = col_start + pool_width-1
             
-                pool = input[row_start:row_end, col_start:col_end, c]
-                output[i, j, c] = maximum(pool)
+                pool = @view input[row_start:row_end, col_start:col_end, c]
+                output[row, col, c] = maximum(pool)
             end
         end
     end
@@ -26,22 +26,22 @@ end
 
 
 backward(node::BroadcastedOperator{typeof(MaxPool)}, input, pool_size, gradient) = let
-    input_height, input_width, channels = size(input) # 11x11x16
-    pool_height, pool_width = pool_size # 2x2
-    gradient_height, gradient_width = size(gradient) # 5x5x16
+    input_height, input_width, channels = size(input)
+    pool_height, pool_width = pool_size
+    gradient_height, gradient_width = size(gradient)
     
     input_height % pool_height != 0 ? input_height_new = pool_height*size(gradient)[1] : input_height_new = input_height
     input_width % pool_width != 0 ? input_width_new = pool_width*size(gradient)[2] : input_width_new = input_width
     
-    J = zeros(input_height, input_width, channels) # 11x11x16
+    J = zeros(Float32, input_height, input_width, channels)
         
     for c in 1:channels
-        for i in 1:pool_width:input_width_new # 1, 3, 5, 7, 9, 11
-            for j in 1:pool_height:input_height_new # 1, 3, 5, 7, 9, 11
-                end_i = min(i + pool_width - 1, input_width) # 2
-                end_j = min(j + pool_height - 1, input_height) # 2
+        for i in 1:pool_width:input_width_new
+            for j in 1:pool_height:input_height_new
+                end_i = min(i + pool_width - 1, input_width)
+                end_j = min(j + pool_height - 1, input_height)
             
-                max_value, max_idx = findmax(input[i:end_i, j:end_j,c]) # [1:2, 1:2, 1, 1]
+                max_value, max_idx = findmax(@view input[i:end_i, j:end_j,c])
 
                 J[i + max_idx[1] - 1, j + max_idx[2] - 1,c] = 1*gradient[div(i-1,pool_width) + 1, div(j-1, pool_height) + 1, c]
             end
