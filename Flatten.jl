@@ -4,8 +4,8 @@ forward(::BroadcastedOperator{typeof(Flatten)}, input) = let
 end
 
 backward(node::BroadcastedOperator{typeof(Flatten)}, input, g) = let
-    height, width, channels = size(input)
-    J =  ones(height, width, channels)
-    g = reshape(g, height, width, channels)
-    tuple(J .* g)
+    J =  ones(Float32, size(input))
+    gradient = reshape(g, size(input))
+    J .*= gradient
+    tuple(J)
 end
