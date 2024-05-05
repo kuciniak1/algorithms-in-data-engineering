@@ -38,7 +38,11 @@ backward(node::BroadcastedOperator{typeof(Convolution)}, input, weights, bias, g
         for c in 1:output_channels
             tmp_weights .= @views weights[:, :, k, c]
             tmp_gradient .= @views gradient[:, :, c]
-            grad_input[:, :, k] += Convolution_2d(tmp_weights, tmp_gradient; padding=true)
+            for i = 1:output_height
+                for j = 1:output_width
+                    grad_input[i:i+kernel_height-1, j:j+kernel_width-1, k] .+= (weights[:,:,k,c] .* gradient[i,j,c]);
+                end
+            end
         end
     end
     
