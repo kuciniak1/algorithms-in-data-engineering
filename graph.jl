@@ -92,10 +92,10 @@ update!(node::GraphNode, gradient) = if isnothing(node.gradient)
         node.gradient .+= gradient
 end
 
-function backward!(order::Vector; seed=1.0)
+function backward!(order::Vector; seed=1.0f0)
     result = last(order)
     result.gradient = seed
-#    @assert length(result.output) == 1 "Gradient is defined only for scalar functions"
+    @assert length(result.output) == 1 "Gradient is defined only for scalar functions"
     for node in reverse(order)
         backward!(node)
     end
