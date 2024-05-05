@@ -40,7 +40,7 @@ backward(node::BroadcastedOperator{typeof(Convolution)}, input, weights, bias, g
             tmp_gradient .= @views gradient[:, :, c]
             for i = 1:output_height
                 for j = 1:output_width
-                    grad_input[i:i+kernel_height-1, j:j+kernel_width-1, k] .+= (weights[:,:,k,c] .* gradient[i,j,c]);
+                    grad_input[i:i+kernel_height-1, j:j+kernel_width-1, k] .+= (tmp_weights .* tmp_gradient[i,j]);
                 end
             end
         end
@@ -96,10 +96,14 @@ backward(node::BroadcastedOperator{typeof(Convolution)}, input, weights, gradien
         for c in 1:output_channels
             tmp_weights .= @views weights[:, :, k, c]
             tmp_gradient .= @views gradient[:, :, c]
-            grad_input[:, :, k] += Convolution_2d(tmp_weights, tmp_gradient; padding=true)
+            for i = 1:output_height
+                for j = 1:output_width
+                    grad_input[i:i+kernel_height-1, j:j+kernel_width-1, k] .+= (tmp_weights .* tmp_gradient[i,j]);
+                end
+            end
         end
     end
-
+    
     for k in 1:input_channels
         for c in 1:output_channels
             tmp_input .= @views input[:, :, k]
@@ -116,13 +120,6 @@ end
 function Convolution_2d(input, kernel; bias=0., padding=false)
     input_rows, input_columns = size(input)
     kernel_height, kernel_width = size(kernel)
-
-    if padding
-        padded_input = zeros(Float32, input_rows + 2*kernel_height - 2, input_columns + 2*kernel_width - 2)
-        padded_input[kernel_height:end-kernel_height+1, kernel_width:end-kernel_width+1] .= input
-        input_rows, input_columns = size(padded_input)
-        input = padded_input
-    end
 
     output_rows = input_rows - kernel_height + 1
     output_columns = input_columns - kernel_width + 1
