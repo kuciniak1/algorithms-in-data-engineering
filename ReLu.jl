@@ -6,12 +6,10 @@ forward(::BroadcastedOperator{typeof(ReLu)}, input) = let
 end
 
 backward(node::BroadcastedOperator{typeof(ReLu)}, input::Array{Float32, 1}, g) = let
-    J = input .> 0
-    tuple(J .* g)
+    tuple(g .* (input .>= 0))
 end
 
 
 backward(node::BroadcastedOperator{typeof(ReLu)}, input::Array{Float32, 3}, g) = let
-    J = input .> 0
-    tuple(J .* g)
+    tuple(g .* (input .>= 0))
 end
