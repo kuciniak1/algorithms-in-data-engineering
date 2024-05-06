@@ -121,14 +121,23 @@ function Convolution_2d(input, kernel; bias=0., padding=false)
     input_rows, input_columns = size(input)
     kernel_height, kernel_width = size(kernel)
 
+    if padding
+        padded_input = zeros(Float32, input_rows + 2*kernel_height - 2, input_columns + 2*kernel_width - 2)
+        padded_input[kernel_height:end-kernel_height+1, kernel_width:end-kernel_width+1] .= input
+        input_rows, input_columns = size(padded_input)
+        input = padded_input
+    end
+
     output_rows = input_rows - kernel_height + 1
     output_columns = input_columns - kernel_width + 1
     output = zeros(Float32, output_rows, output_columns)
-
+    sumret = zeros(size(kernel))
     for c in 1:output_columns
         for r in 1:output_rows
             patch = @view input[r:r+kernel_height-1, c:c+kernel_width-1]
-            output[r, c] = sum(patch .* kernel) + bias
+            sumret .= patch .* kernel
+            output[r, c] = sum(sumret) + bias
+            sumret .= 0.0
         end
     end
     return output
