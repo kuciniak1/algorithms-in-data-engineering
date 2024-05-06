@@ -38,7 +38,7 @@ sum(x::GraphNode) = BroadcastedOperator(sum, x)
 forward(::BroadcastedOperator{typeof(sum)}, x) = return sum(x)
 backward(::BroadcastedOperator{typeof(sum)}, x, g) = let
     𝟏 = ones(Float32, size(x))
-   tuple(𝟏 .* g)
+    tuple(𝟏 .* g)
 end
 
 Base.Broadcast.broadcasted(/, x::GraphNode, y::GraphNode) = BroadcastedOperator(/, x, y)
@@ -72,7 +72,6 @@ import Base: log
 Base.Broadcast.broadcasted(log, x::GraphNode) = BroadcastedOperator(log, x)
 forward(::BroadcastedOperator{typeof(log)}, x) = return log.(x)
 backward(::BroadcastedOperator{typeof(log)}, x, g) = let
-    𝟏 = ones(Float32, length(x))
     tuple(g ./ x)
 end
 

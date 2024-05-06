@@ -1,8 +1,6 @@
 ReLu(input::GraphNode) = BroadcastedOperator(ReLu, input)
 forward(::BroadcastedOperator{typeof(ReLu)}, input) = let
-    zeros_cons = zeros(Float32, size(input))
-    output = max.(input, zeros_cons)
-    return output
+    return max.(input, 0)
 end
 
 backward(node::BroadcastedOperator{typeof(ReLu)}, input::Array{Float32, 1}, g) = let
