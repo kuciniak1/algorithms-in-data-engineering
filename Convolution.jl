@@ -61,7 +61,7 @@ backward(node::BroadcastedOperator{typeof(Convolution)}, input, weights, bias, g
 
     grad_bias = reshape(sum(gradient, dims=(1,2,4)), :)
     
-    return grad_input, grad_weights, grad_bias
+    return tuple(grad_input, grad_weights, grad_bias)
 end
 
 
@@ -124,7 +124,7 @@ backward(node::BroadcastedOperator{typeof(Convolution)}, input, weights, gradien
         end
     end
     
-    return grad_input, grad_weights
+    return tuple(grad_input, grad_weights)
 end
 
 
