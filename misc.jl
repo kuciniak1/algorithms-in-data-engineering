@@ -25,6 +25,16 @@ function onehot(target::Int64, labels::UnitRange{Int64})
     return onehot
 end
 
+function onehotbatch(targets::Vector{Int64}, labels::UnitRange{Int64})
+    num_targets = length(targets)
+    num_labels = length(labels)
+    onehot_matrix = zeros(Int, num_labels, num_targets)
+    for i in 1:num_targets
+        onehot_matrix[targets[i]+1, i] = 1
+    end
+    return onehot_matrix
+end
+
 function onecold(vector, labels)
     idx = argmax(vector)
     idx <= length(labels) ? labels[idx] : nothing
