@@ -19,11 +19,10 @@ forward(::BroadcastedOperator{typeof(Convolution)}, input, weights, bias) = let
             tmp_input .= @views input[:, :, c]
             tmp_weights .= @views weights[:, :, c, k]
             Convolution_2d!(ret, tmp_input, tmp_weights; bias=bias[k])
-            output[:, :, k] .+= ret
+            @views output[:, :, k] .+= ret
             ret .= 0.0
         end
     end
-    
     return output
 end
 
@@ -55,7 +54,7 @@ backward(node::BroadcastedOperator{typeof(Convolution)}, input, weights, bias, g
             tmp_input .= @views input[:, :, k]
             tmp_gradient .= @views gradient[:, :, c]
             Convolution_2d!(tmp_weights, tmp_input, tmp_gradient)
-            grad_weights[:, :, k, c] .+= tmp_weights
+            @views grad_weights[:, :, k, c] .+= tmp_weights
         end
     end
 
