@@ -11,14 +11,14 @@ show(io::IO, x::MaxPoolOperator{F}) where {F} = print(io, "op.", x.name, "(", F,
 
 MaxPool(input::GraphNode, pool_size::GraphNode) = MaxPoolOperator(MaxPool, input, pool_size)
 
-forward(::MaxPoolOperator{typeof(MaxPool)}, input, pool_size) = let
+forward(node::MaxPoolOperator{typeof(MaxPool)}, input, pool_size) = let
     input_rows, input_columns, channels = size(input)
     pool_height, pool_width = pool_size
     
     output_rows = div(input_rows, pool_height)
     output_columns = div(input_columns, pool_width)
     
-    output = zeros(Float32, output_rows, output_columns, channels)
+    node.output = zeros(Float32, output_rows, output_columns, channels)
     
     for c in 1:channels
         for col in 1:output_columns
@@ -29,11 +29,11 @@ forward(::MaxPoolOperator{typeof(MaxPool)}, input, pool_size) = let
                 col_end = col_start + pool_width-1
             
                 pool = @view input[row_start:row_end, col_start:col_end, c]
-                output[row, col, c] = maximum(pool)
+                node.output[row, col, c] = maximum(pool)
             end
         end
     end
-    return output
+    return node.output
 end
 
 
