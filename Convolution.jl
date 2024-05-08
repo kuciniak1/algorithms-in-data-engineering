@@ -12,13 +12,15 @@ forward(::BroadcastedOperator{typeof(Convolution)}, input, weights, bias) = let
     output_width = input_width - kernel_width + 1
     output = zeros(Float32, output_height, output_width, output_channels)
     ret = zeros(Float32, output_height, output_width)
+    sumret = zeros(Float32, kernel_height, kernel_width)
     tmp_input = zeros(Float32, input_height, input_width)
     tmp_weights = zeros(Float32, kernel_height, kernel_width)
+    
     for k in 1:output_channels
         for c in 1:input_channels
             tmp_input .= @views input[:, :, c]
             tmp_weights .= @views weights[:, :, c, k]
-            Convolution_2d!(ret, tmp_input, tmp_weights; bias=bias[k])
+            Convolution_2d!(ret, sumret, tmp_input, tmp_weights; bias=bias[k])
             @views output[:, :, k] .+= ret
             ret .= 0.0
         end
@@ -37,7 +39,6 @@ backward(node::BroadcastedOperator{typeof(Convolution)}, input, weights, bias, g
     tmp_weights = zeros(Float32, kernel_height, kernel_width)
     tmp_input = zeros(Float32, input_height, input_width)
     tmp_gradient = zeros(Float32, output_height, output_width)
-    tmp_weight_gradient = zeros(Float32, kernel_height, kernel_width)
     for k in 1:input_channels
         for c in 1:output_channels
             for i = 1:output_height
@@ -47,13 +48,13 @@ backward(node::BroadcastedOperator{typeof(Convolution)}, input, weights, bias, g
             end
         end
     end
-    
+    sumret = zeros(Float32, output_height, output_width)
     for k in 1:input_channels
         for c in 1:output_channels
             tmp_weights .= 0
             tmp_input .= @views input[:, :, k]
             tmp_gradient .= @views gradient[:, :, c]
-            Convolution_2d!(tmp_weights, tmp_input, tmp_gradient)
+            Convolution_2d!(tmp_weights, sumret, tmp_input, tmp_gradient)
             @views grad_weights[:, :, k, c] .+= tmp_weights
         end
     end
@@ -74,18 +75,19 @@ forward(::BroadcastedOperator{typeof(Convolution)}, input, weights) = let
     output_width = input_width - kernel_width + 1
     output = zeros(Float32, output_height, output_width, output_channels)
     ret = zeros(Float32, output_height, output_width)
+    sumret = zeros(Float32, kernel_height, kernel_width)
     tmp_input = zeros(Float32, input_height, input_width)
     tmp_weights = zeros(Float32, kernel_height, kernel_width)
+    
     for k in 1:output_channels
         for c in 1:input_channels
             tmp_input .= @views input[:, :, c]
             tmp_weights .= @views weights[:, :, c, k]
-            Convolution_2d!(ret, tmp_input, tmp_weights)
-            output[:, :, k] .+= ret
+            Convolution_2d!(ret, sumret, tmp_input, tmp_weights)
+            @views output[:, :, k] .+= ret
             ret .= 0.0
         end
     end
-    
     return output
 end
 
@@ -100,26 +102,23 @@ backward(node::BroadcastedOperator{typeof(Convolution)}, input, weights, gradien
     tmp_weights = zeros(Float32, kernel_height, kernel_width)
     tmp_input = zeros(Float32, input_height, input_width)
     tmp_gradient = zeros(Float32, output_height, output_width)
-    
     for k in 1:input_channels
         for c in 1:output_channels
-            tmp_weights .= @views weights[:, :, k, c]
-            tmp_gradient .= @views gradient[:, :, c]
             for i = 1:output_height
                 for j = 1:output_width
-                    grad_input[i:i+kernel_height-1, j:j+kernel_width-1, k] .+= (tmp_weights .* tmp_gradient[i,j]);
+                    @views grad_input[i:i+kernel_height-1, j:j+kernel_width-1, k] .+= (weights[:, :, k, c] .* gradient[i, j, c]);
                 end
             end
         end
     end
-    
+    sumret = zeros(Float32, output_height, output_width)
     for k in 1:input_channels
         for c in 1:output_channels
+            tmp_weights .= 0
             tmp_input .= @views input[:, :, k]
             tmp_gradient .= @views gradient[:, :, c]
-            Convolution_2d!(tmp_weights, tmp_input, tmp_gradient)
-            grad_weights[:, :, k, c] .+= tmp_weights
-            tmp_weights .= 0
+            Convolution_2d!(tmp_weights, sumret, tmp_input, tmp_gradient)
+            @views grad_weights[:, :, k, c] .+= tmp_weights
         end
     end
     
@@ -154,7 +153,7 @@ function Convolution_2d(input, kernel; bias=0., padding=false)
     return output
 end
 
-function Convolution_2d!(ret, input, kernel; bias=0., padding=false)
+function Convolution_2d!(ret, sumret, input, kernel; bias=0., padding=false)
     input_rows, input_columns = size(input)
     kernel_height, kernel_width = size(kernel)
 
@@ -167,11 +166,10 @@ function Convolution_2d!(ret, input, kernel; bias=0., padding=false)
 
     output_rows = input_rows - kernel_height + 1
     output_columns = input_columns - kernel_width + 1
-    sumret = zeros(size(kernel))
     for c in 1:output_columns
         for r in 1:output_rows
             patch = @view input[r:r+kernel_height-1, c:c+kernel_width-1]
-            sumret .= patch .* kernel
+            @views sumret .= patch .* kernel
             ret[r, c] = sum(sumret) + bias
             sumret .= 0.0
         end
