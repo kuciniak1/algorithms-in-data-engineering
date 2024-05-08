@@ -1,5 +1,17 @@
-MaxPool(input::GraphNode, pool_size) = BroadcastedOperator(MaxPool, input, pool_size)
-forward(::BroadcastedOperator{typeof(MaxPool)}, input, pool_size) = let
+mutable struct MaxPoolOperator{F} <: Operator
+    inputs::Union{Nothing, Tuple{GraphNode, GraphNode}}
+    output::Union{Nothing, Array{Float32, 3}}
+    gradient::Union{Nothing, Array{Float32, 3}}
+    name::String
+    MaxPoolOperator(fun, inputs...; name="?") = new{typeof(fun)}(inputs, nothing, nothing, name)
+end
+
+
+show(io::IO, x::MaxPoolOperator{F}) where {F} = print(io, "op.", x.name, "(", F, ")");
+
+MaxPool(input::GraphNode, pool_size::GraphNode) = MaxPoolOperator(MaxPool, input, pool_size)
+
+forward(::MaxPoolOperator{typeof(MaxPool)}, input, pool_size) = let
     input_rows, input_columns, channels = size(input)
     pool_height, pool_width = pool_size
     
@@ -25,7 +37,7 @@ forward(::BroadcastedOperator{typeof(MaxPool)}, input, pool_size) = let
 end
 
 
-backward(node::BroadcastedOperator{typeof(MaxPool)}, input, pool_size, gradient) = let
+backward(node::MaxPoolOperator{typeof(MaxPool)}, input, pool_size, gradient) = let
     input_height, input_width, channels = size(input)
     pool_height, pool_width = pool_size
     gradient_height, gradient_width = size(gradient)
