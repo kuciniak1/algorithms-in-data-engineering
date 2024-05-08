@@ -1,15 +1,23 @@
 mutable struct MaxPoolOperator{F} <: Operator
-    inputs::Union{Nothing, Tuple{GraphNode, GraphNode}}
+    inputs::Union{Nothing, Tuple{GraphNode, Constant{Tuple{Int64, Int64}}}}
     output::Union{Nothing, Array{Float32, 3}}
     gradient::Union{Nothing, Array{Float32, 3}}
     name::String
-    MaxPoolOperator(fun, inputs...; name="?") = new{typeof(fun)}(inputs, nothing, nothing, name)
+    MaxPoolOperator(fun, inputs...; name="?", output=output) = new{typeof(fun)}(inputs, output, nothing, name)
 end
 
 
 show(io::IO, x::MaxPoolOperator{F}) where {F} = print(io, "op.", x.name, "(", F, ")");
 
-MaxPool(input::GraphNode, pool_size::GraphNode) = MaxPoolOperator(MaxPool, input, pool_size)
+MaxPool(input::GraphNode, pool_size::GraphNode) = let
+    input_rows, input_columns, channels = size(input.output)
+    pool_height, pool_width = pool_size.output
+    output_rows = div(input_rows, pool_height)
+    output_columns = div(input_columns, pool_width)
+
+    output = zeros(Float32, output_rows, output_columns, channels)
+    return MaxPoolOperator(MaxPool, input, pool_size; output=output)
+end
 
 forward(node::MaxPoolOperator{typeof(MaxPool)}, input, pool_size) = let
     input_rows, input_columns, channels = size(input)
@@ -18,7 +26,7 @@ forward(node::MaxPoolOperator{typeof(MaxPool)}, input, pool_size) = let
     output_rows = div(input_rows, pool_height)
     output_columns = div(input_columns, pool_width)
     
-    node.output = zeros(Float32, output_rows, output_columns, channels)
+    output = zeros(Float32, output_rows, output_columns, channels)
     
     for c in 1:channels
         for col in 1:output_columns
@@ -29,11 +37,11 @@ forward(node::MaxPoolOperator{typeof(MaxPool)}, input, pool_size) = let
                 col_end = col_start + pool_width-1
             
                 pool = @view input[row_start:row_end, col_start:col_end, c]
-                node.output[row, col, c] = maximum(pool)
+                output[row, col, c] = maximum(pool)
             end
         end
     end
-    return node.output
+    return output
 end
 
 
@@ -55,7 +63,7 @@ backward(node::MaxPoolOperator{typeof(MaxPool)}, input, pool_size, gradient) = l
             
                 max_value, max_idx = findmax(@view input[i:end_i, j:end_j,c])
 
-                J[i + max_idx[1] - 1, j + max_idx[2] - 1,c] = 1*gradient[div(i-1,pool_width) + 1, div(j-1, pool_height) + 1, c]
+                J[i + max_idx[1] - 1, j + max_idx[2] - 1,c] = gradient[div(i-1,pool_width) + 1, div(j-1, pool_height) + 1, c]
             end
         end
     end

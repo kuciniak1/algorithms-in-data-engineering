@@ -1,26 +1,42 @@
-function Conv(input, weights, bias, activation) return activation.(Convolution(input, weights, bias)) end
+mutable struct ConvOperator{F} <: Operator
+    inputs::Union{Nothing, Tuple{GraphNode, GraphNode, GraphNode}, Tuple{GraphNode, GraphNode}}
+    output::Union{Nothing, Array{Float32, 3}}
+    gradient::Union{Nothing, Array{Float32, 3}}
+    name::String
+    input_2d::Union{Nothing, Array{Float32, 2}}
+    ConvOperator(fun, inputs...; output=nothing, name="?", input_2d=nothing) = new{typeof(fun)}(inputs, output, nothing, name, input_2d)
+end
 
-function Conv(input, weights, activation) return activation.(Convolution(input, weights)) end
+
+show(io::IO, x::ConvOperator{F}) where {F} = print(io, "op.", x.name, "(", F, ")");
+
+Conv(input::GraphNode, weights::GraphNode, bias::GraphNode) = let
+    input_height, input_width, input_channels = size(input.output)
+    kernel_height, kernel_width, channels_in, channels_out = size(weights.output)
+    output = zeros(Float32, input_height - kernel_height + 1, input_width - kernel_width + 1, channels_out)
+    input_2d = zeros(Float32, input_height, input_width)
+    return ConvOperator(Conv, input, weights, bias; output=output, input_2d=input_2d)
+end
 
 
-Convolution(input::GraphNode, weights::GraphNode, bias::GraphNode) = BroadcastedOperator(Convolution, input, weights, bias)
-forward(::BroadcastedOperator{typeof(Convolution)}, input, weights, bias) = let
+forward(node::ConvOperator{typeof(Conv)}, input, weights, bias) = let
     input_height, input_width, input_channels = size(input)
     kernel_height, kernel_width, _, output_channels = size(weights)
 
     output_height = input_height - kernel_height + 1
     output_width = input_width - kernel_width + 1
     output = zeros(Float32, output_height, output_width, output_channels)
+    
     ret = zeros(Float32, output_height, output_width)
     sumret = zeros(Float32, kernel_height, kernel_width)
-    tmp_input = zeros(Float32, input_height, input_width)
+    
     tmp_weights = zeros(Float32, kernel_height, kernel_width)
     
     for k in 1:output_channels
         for c in 1:input_channels
-            tmp_input .= @views input[:, :, c]
+            node.input_2d .= @views input[:, :, c]
             tmp_weights .= @views weights[:, :, c, k]
-            Convolution_2d!(ret, sumret, tmp_input, tmp_weights; bias=bias[k])
+            Convolution_2d!(ret, sumret, node.input_2d, tmp_weights; bias=bias[k])
             @views output[:, :, k] .+= ret
             ret .= 0.0
         end
@@ -28,7 +44,7 @@ forward(::BroadcastedOperator{typeof(Convolution)}, input, weights, bias) = let
     return output
 end
 
-backward(node::BroadcastedOperator{typeof(Convolution)}, input, weights, bias, gradient) = let
+backward(node::ConvOperator{typeof(Conv)}, input, weights, bias, gradient) = let
     input_height, input_width, input_channels = size(input)
     output_height, output_width, output_channels = size(gradient)
     kernel_height, kernel_width, _, _ = size(weights)
@@ -37,7 +53,6 @@ backward(node::BroadcastedOperator{typeof(Convolution)}, input, weights, bias, g
     grad_weights = zeros(Float32, size(weights))
     
     tmp_weights = zeros(Float32, kernel_height, kernel_width)
-    tmp_input = zeros(Float32, input_height, input_width)
     tmp_gradient = zeros(Float32, output_height, output_width)
     for k in 1:input_channels
         for c in 1:output_channels
@@ -52,9 +67,9 @@ backward(node::BroadcastedOperator{typeof(Convolution)}, input, weights, bias, g
     for k in 1:input_channels
         for c in 1:output_channels
             tmp_weights .= 0
-            tmp_input .= @views input[:, :, k]
+            node.input_2d .= @views input[:, :, k]
             tmp_gradient .= @views gradient[:, :, c]
-            Convolution_2d!(tmp_weights, sumret, tmp_input, tmp_gradient)
+            Convolution_2d!(tmp_weights, sumret, node.input_2d, tmp_gradient)
             @views grad_weights[:, :, k, c] .+= tmp_weights
         end
     end
@@ -65,9 +80,7 @@ backward(node::BroadcastedOperator{typeof(Convolution)}, input, weights, bias, g
 end
 
 
-
-Convolution(input::GraphNode, weights::GraphNode) = BroadcastedOperator(Convolution, input, weights)
-forward(::BroadcastedOperator{typeof(Convolution)}, input, weights) = let
+forward(node::ConvOperator{typeof(Conv)}, input, weights) = let
     input_height, input_width, input_channels = size(input)
     kernel_height, kernel_width, _, output_channels = size(weights)
 
@@ -91,7 +104,7 @@ forward(::BroadcastedOperator{typeof(Convolution)}, input, weights) = let
     return output
 end
 
-backward(node::BroadcastedOperator{typeof(Convolution)}, input, weights, gradient) = let
+backward(node::ConvOperator{typeof(Conv)}, input, weights, gradient) = let
     input_height, input_width, input_channels = size(input)
     output_height, output_width, output_channels = size(gradient)
     kernel_height, kernel_width, _, _ = size(weights)
