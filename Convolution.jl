@@ -4,7 +4,8 @@ mutable struct ConvOperator{F} <: Operator
     gradient::Union{Nothing, Array{Float32, 3}}
     name::String
     input_2d::Union{Nothing, Array{Float32, 2}}
-    ConvOperator(fun, inputs...; output=nothing, name="?", input_2d=nothing) = new{typeof(fun)}(inputs, output, nothing, name, input_2d)
+    weights_2d::Union{Nothing, Array{Float32, 2}}
+    ConvOperator(fun, inputs...; output=nothing, name="?", input_2d=nothing, weights_2d=nothing) = new{typeof(fun)}(inputs, output, nothing, name, input_2d, weights_2d)
 end
 
 
@@ -14,8 +15,10 @@ Conv(input::GraphNode, weights::GraphNode, bias::GraphNode) = let
     input_height, input_width, input_channels = size(input.output)
     kernel_height, kernel_width, channels_in, channels_out = size(weights.output)
     output = zeros(Float32, input_height - kernel_height + 1, input_width - kernel_width + 1, channels_out)
+    
     input_2d = zeros(Float32, input_height, input_width)
-    return ConvOperator(Conv, input, weights, bias; output=output, input_2d=input_2d)
+    weights_2d = zeros(Float32, kernel_height, kernel_width)
+    return ConvOperator(Conv, input, weights, bias; output=output, input_2d=input_2d, weights_2d=weights_2d)
 end
 
 
@@ -30,13 +33,12 @@ forward(node::ConvOperator{typeof(Conv)}, input, weights, bias) = let
     ret = zeros(Float32, output_height, output_width)
     sumret = zeros(Float32, kernel_height, kernel_width)
     
-    tmp_weights = zeros(Float32, kernel_height, kernel_width)
     
     for k in 1:output_channels
         for c in 1:input_channels
             node.input_2d .= @views input[:, :, c]
-            tmp_weights .= @views weights[:, :, c, k]
-            Convolution_2d!(ret, sumret, node.input_2d, tmp_weights; bias=bias[k])
+            node.weights_2d .= @views weights[:, :, c, k]
+            Convolution_2d!(ret, sumret, node.input_2d, node.weights_2d; bias=bias[k])
             @views output[:, :, k] .+= ret
             ret .= 0.0
         end
@@ -52,7 +54,6 @@ backward(node::ConvOperator{typeof(Conv)}, input, weights, bias, gradient) = let
     grad_input = zeros(Float32, size(input))
     grad_weights = zeros(Float32, size(weights))
     
-    tmp_weights = zeros(Float32, kernel_height, kernel_width)
     tmp_gradient = zeros(Float32, output_height, output_width)
     for k in 1:input_channels
         for c in 1:output_channels
@@ -66,11 +67,11 @@ backward(node::ConvOperator{typeof(Conv)}, input, weights, bias, gradient) = let
     sumret = zeros(Float32, output_height, output_width)
     for k in 1:input_channels
         for c in 1:output_channels
-            tmp_weights .= 0
+            node.weights_2d .= 0
             node.input_2d .= @views input[:, :, k]
             tmp_gradient .= @views gradient[:, :, c]
-            Convolution_2d!(tmp_weights, sumret, node.input_2d, tmp_gradient)
-            @views grad_weights[:, :, k, c] .+= tmp_weights
+            Convolution_2d!(node.weights_2d, sumret, node.input_2d, tmp_gradient)
+            @views grad_weights[:, :, k, c] .+= node.weights_2d
         end
     end
 
