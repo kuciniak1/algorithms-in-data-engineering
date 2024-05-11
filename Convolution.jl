@@ -19,7 +19,7 @@ forward(::BroadcastedOperator{typeof(Convolution)}, input, weights, bias) = let
         for c in 1:input_channels
             tmp_input .= @views input[:, :, c]
             tmp_weights .= @views weights[:, :, c, k]
-            Convolution_2d!(ret, tmp_input, tmp_weights; bias=bias[k])
+            Convolution_2d_small_kernel!(ret, tmp_input, tmp_weights; bias=bias[k])
             @views output[:, :, k] .+= ret
             ret .= 0.0
         end
@@ -47,11 +47,12 @@ backward(node::BroadcastedOperator{typeof(Convolution)}, input, weights, bias, g
             end
         end
     end
+    sumret = zeros(Float32, output_height, output_width)
     for k in 1:input_channels
         for c in 1:output_channels
             tmp_input .= @views input[:, :, k]
             tmp_gradient .= @views gradient[:, :, c]
-            Convolution_2d!(tmp_weights, tmp_input, tmp_gradient)
+            Convolution_2d_big_kernel!(tmp_weights, sumret, tmp_input, tmp_gradient)
             @views grad_weights[:, :, k, c] .+= tmp_weights
             tmp_weights .= 0
         end
@@ -80,7 +81,7 @@ forward(::BroadcastedOperator{typeof(Convolution)}, input, weights) = let
         for c in 1:input_channels
             tmp_input .= @views input[:, :, c]
             tmp_weights .= @views weights[:, :, c, k]
-            Convolution_2d!(ret, tmp_input, tmp_weights)
+            Convolution_2d_small_kernel!(ret, tmp_input, tmp_weights)
             @views output[:, :, k] .+= ret
             ret .= 0.0
         end
@@ -108,12 +109,13 @@ backward(node::BroadcastedOperator{typeof(Convolution)}, input, weights, gradien
             end
         end
     end
+    sumret = zeros(Float32, output_height, output_width)
     for k in 1:input_channels
         for c in 1:output_channels
             tmp_weights .= 0
             tmp_input .= @views input[:, :, k]
             tmp_gradient .= @views gradient[:, :, c]
-            Convolution_2d!(tmp_weights, tmp_input, tmp_gradient)
+            Convolution_2d_big_kernel!(tmp_weights, sumret, tmp_input, tmp_gradient)
             @views grad_weights[:, :, k, c] .+= tmp_weights
         end
     end
@@ -149,7 +151,30 @@ function Convolution_2d(input, kernel; bias=0., padding=false)
     return output
 end
 
-function Convolution_2d!(ret, input, kernel; bias=0., padding=false)
+function Convolution_2d_big_kernel!(ret, sumret, input, kernel; bias=0., padding=false)
+    input_rows, input_columns = size(input)
+    kernel_height, kernel_width = size(kernel)
+
+    if padding
+        padded_input = zeros(Float32, input_rows + 2*kernel_height - 2, input_columns + 2*kernel_width - 2)
+        padded_input[kernel_height:end-kernel_height+1, kernel_width:end-kernel_width+1] .= input
+        input_rows, input_columns = size(padded_input)
+        input = padded_input
+    end
+
+    output_rows = input_rows - kernel_height + 1
+    output_columns = input_columns - kernel_width + 1
+    for c in 1:output_columns
+        for r in 1:output_rows
+            patch = @view input[r:r+kernel_height-1, c:c+kernel_width-1]
+            sumret .= patch .* kernel
+            ret[r, c] = sum(sumret) + bias
+            sumret .= 0.0
+        end
+    end
+end
+
+function Convolution_2d_small_kernel!(ret, input, kernel; bias=0., padding=false)
     input_rows, input_columns = size(input)
     kernel_height, kernel_width = size(kernel)
 
