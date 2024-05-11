@@ -40,9 +40,9 @@ backward(node::BroadcastedOperator{typeof(Convolution)}, input, weights, bias, g
     tmp_gradient = zeros(Float32, output_height, output_width)
     for k in 1:input_channels
         for c in 1:output_channels
-            for i = 1:output_height
-                for j = 1:output_width
-                    @views grad_input[i:i+kernel_height-1, j:j+kernel_width-1, k] .+= (weights[:, :, k, c] .* gradient[i, j, c]);
+            for i = 1:kernel_height
+                for j = 1:kernel_width
+                    @views grad_input[i:i+output_height-1, j:j+output_width-1, k] .+= (gradient[:, :, c] .* weights[i, j, k, c] );
                 end
             end
         end
@@ -102,9 +102,9 @@ backward(node::BroadcastedOperator{typeof(Convolution)}, input, weights, gradien
     tmp_gradient = zeros(Float32, output_height, output_width)
     for k in 1:input_channels
         for c in 1:output_channels
-            for i = 1:output_height
-                for j = 1:output_width
-                    @views grad_input[i:i+kernel_height-1, j:j+kernel_width-1, k] .+= (weights[:, :, k, c] .* gradient[i, j, c]);
+            for i = 1:kernel_height
+                for j = 1:kernel_width
+                    @views grad_input[i:i+output_height-1, j:j+output_width-1, k] .+= (gradient[:, :, c] .* weights[i, j, k, c] );
                 end
             end
         end
